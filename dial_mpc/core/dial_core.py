@@ -264,6 +264,7 @@ def main():
     state = state_init
     us = []
     infos = []
+    freqs = []
     with tqdm(range(Nstep), desc="Rollout") as pbar:
         for t in pbar:
             # forward single step
@@ -290,10 +291,14 @@ def main():
             rews_plan.append(info["rews"][-1].mean())
             infos.append(info)
             freq = 1 / (time.time() - t0)
+            freqs.append(freq)
             pbar.set_postfix({"rew": f"{state.reward:.2e}", "freq": f"{freq:.2f}"})
 
     rew = jnp.array(rews).mean()
-    print(f"mean reward = {rew:.2e}")
+    print(f"mean reward = {rew:.4e}")
+    freqs = jnp.array(freqs)
+    print(f"mean freq = {freqs.mean():.2f}")
+    print(f"median freq = {freqs.median():.2f}")
 
     # save us
     # us = jnp.array(us)
