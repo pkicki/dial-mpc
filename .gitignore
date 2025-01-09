@@ -1,6 +1,10 @@
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,c++,python,ros2
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,c++,python,ros2
 
+# Ignore logs form the experiments
+*.npy
+*.html
+
 ### C++ ###
 # Prerequisites
 *.d
