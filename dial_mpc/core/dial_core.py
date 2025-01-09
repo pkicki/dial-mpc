@@ -105,6 +105,11 @@ class MBDPI:
             lp_noise_normalized = lp_noise / scale
             self.lp_noise = jnp.array(lp_noise_normalized)
             self.noise = self.lp_noise
+        elif self.noise_type == "colored":
+            import colorednoise
+            noise_beta = 1.0
+            self.noise = colorednoise.powerlaw_psd_gaussian(noise_beta,
+                                                            size=normal_noise.shape) 
         ##for i in range(5):
         ##    plt.plot(lp_noise_normalized[0, i, :, 0])
         ##plt.show()
