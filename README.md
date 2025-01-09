@@ -21,9 +21,21 @@ That means you can test out the controller in a plug-and-play manner with minimu
 
 ## News
 
+- 11/03/2024: 🎉 Sim2Real pipeline is ready! Check out the [Sim2Real](#deploy-in-real-unitree-go2) section for more details.
 - 09/25/2024: 🎉 DIAL-MPC is released with open-source codes! Sim2Real pipeline coming soon!
 
 https://github.com/user-attachments/assets/f2e5f26d-69ac-4478-872e-26943821a218
+
+
+## Table of Contents
+
+1. [Install](#install-dial-mpc)
+2. [Synchronous Simulation](#synchronous-simulation)
+3. [Asynchronous Simulation](#asynchronous-simulation)
+4. [Deploy in Real](#deploy-in-real-unitree-go2)
+5. [Writing Your Own Environment](#writing-custom-environment)
+6. [Rendering Rollouts](#rendering-rollouts-in-blender)
+7. [Citing this Work](#bibtex)
 
 ## Simulation Setup
 
@@ -43,6 +55,8 @@ pip3 install -e .
 
 ## Synchronous Simulation
 
+In this mode, the simulation will wait for DIAL-MPC to finish computing before stepping. It is ideal for debugging and doing tasks that are currently not real-time.
+
 #### Run Examples
 
 List available examples:
@@ -61,7 +75,9 @@ After rollout completes, go to `127.0.0.1:5000` to visualize the rollouts.
 
 ## Asynchronous Simulation
 
-The asynchronous simulation is meant to test the algorithm before Sim2Real.
+The asynchronous simulation is meant to test the algorithm before Sim2Real. The simulation rolls out in real-time (or scaled by `real_time_factor`). DIAL-MPC will encounter delay in this case.
+
+When DIAL-MPC cannot finish the compute in the time defined by `dt`, it will spit out warning. Slight overtime is accepetable as DIAL-MPC maintains a buffer of the previous step's solution and will play out the planned action sequence until the buffer runs out.
 
 List available examples:
 
@@ -85,19 +101,120 @@ dial-mpc-plan --example unitree_go2_seq_jump_deploy
 ```
 
 
-## Deploy in Real
+## Deploy in Real (Unitree Go2)
 
-🚧 Check back in late Sep. - early Oct. 2024 for real-world deployment pipeline on Unitree Go2.
-<!-- ### Install `unitree_sdk2_python`
-Execute the following commands in the terminal:
+### Overview
+
+The real-world deployment procedure is very similar to asynchronous simulation.
+
+We use `unitree_sdk2_python` to communicate with the robot directly via CycloneDDS.
+
+### Step 1: State Estimation
+
+For state estimation, this proof-of-concept work requires external localization module to get base **position** and **velocity**.
+
+The following plugins are built-in:
+
+- ROS2 odometry message
+- Vicon motion capture system
+
+#### Option 1: ROS2 odometry message
+
+Configure `odom_topic` in the YAML file. You are responsible for publishing this message at at least 50 Hz and ideally over 100 Hz. We provide an odometry publisher for Vicon motion capture system in [`vicon_interface`](https://github.com/LeCAR-Lab/vicon_interface).
+
+> [!CAUTION]
+> All velocities in ROS2 odometry message **must** be in **body frame** of the base to conform to [ROS odometry message definition](https://docs.ros.org/en/noetic/api/nav_msgs/html/msg/Odometry.html), although in the end they are converted to world frame in DIAL-MPC.
+
+#### Option 2: Vicon (no ROS2 required)
+
+1. `pip install pyvicon-datastream`
+2. Change `localization_plugin` to `vicon_shm_plugin` in the YAML file.
+3. Configure `vicon_tracker_ip`, `vicon_object_name`, and `vicon_z_offset` in the YAML file.
+
+#### Option 3: Bring Your Own Plugin
+
+We provide a simple ABI for custom localization modules, and you need to implement this in a python file in your workspace, should you consider not using the built-in plugins.
+
+```python
+import numpy as np
+import time
+from dial_mpc.deploy.localization import register_plugin
+from dial_mpc.deploy.localization.base_plugin import BaseLocalizationPlugin
+
+class MyPlugin(BaseLocalizationPlugin):
+    def __init__(self, config):
+        pass
+
+    def get_state(self):
+        qpos = np.zeros(7)
+        qvel = np.zeros(6)
+        return np.concatenate([qpos, qvel])
+
+    def get_last_update_time(self):
+        return time.time()
+
+register_plugin('custom_plugin', plugin_cls=MyPlugin)
+```
+
+> [!CAUTION]
+> When writing custom localization plugin, velocities should be reported in **world frame**.
+
+> [!NOTE]
+> Angular velocity source is onboard IMU. You could leave `qvel[3:6]` in the returned state as zero for now.
+
+Localization plugin can be changed in the configuration file. A `--plugin` argument can be supplied to `dial-mpc-real` to import a custom localization plugin in the current workspace.
+
+### Step 2: Installing `unitree_sdk2_python`
+
+> [!NOTE]
+> If you are already using ROS2 with Cyclone DDS according to [ROS2 documentation on Cyclone DDS](https://docs.ros.org/en/humble/Installation/DDS-Implementations/Working-with-Eclipse-CycloneDDS.html), you don't have to install Cyclone DDS as suggested by `unitree_sdk2_python`. But do follow the rest of the instructions.
+
+Follow the instructions in [`unitree_sdk2_python`](https://github.com/unitreerobotics/unitree_sdk2_python).
+
+### Step 3: Configuring DIAL-MPC
+
+In `dial_mpc/examples/unitree_go2_trot_deploy.yaml` or `dial_mpc/examples/unitree_go2_seq_jump.yaml`, modify `network_interface` to match the name of the network interface connected to Go2.
+
+Alternatively, you can also pass `--network_interface` to `dial-mpc-real` when launching the robot, which will override the config.
+
+### Step 4: Starting the Robot
+
+Follow the [official Unitree documentation](https://support.unitree.com/home/en/developer/Quick_start) to disable sports mode on Go2. Lay the robot flat on the ground like shown.
+
+<div style="text-align: center;">
+    <img src="images/go2.png" alt="Unitree Go2 laying flat on the ground." style="width:50%;">
+</div>
+
+### Step 5: Running the Robot
+
+List available examples:
 
 ```bash
-cd ~
-sudo apt install python3-pip
-git clone https://github.com/unitreerobotics/unitree_sdk2_python.git
-cd unitree_sdk2_python
-pip3 install -e .
-``` -->
+dial-mpc-real --list-examples
+```
+
+Run an example:
+
+In terminal 1, run
+
+```bash
+# source /opt/ros/<ros-distro>/setup.bash # if using ROS2
+dial-mpc-real --example unitree_go2_seq_jump_deploy
+```
+
+This will open a mujoco visualization window. The robot will slowly stand up. If the robot is squatting, manually lift the robot into a standing position. Verify that the robot states match the real world and are updating.
+
+You can supply additional arguments to `dial-mpc-real`:
+
+- `--custom-env`: custom environment definition.
+- `--network-interface`: override network interface configuration.
+- `--plugin`: custom localization plugin.
+
+Next, in terminal 2, run
+
+```bash
+dial-mpc-plan --example unitree_go2_seq_jump_deploy
+```
 
 ## Writing Custom Environment
 
