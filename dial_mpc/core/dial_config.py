@@ -7,6 +7,8 @@ class DialConfig:
     seed: int = 0
     output_dir: str = "output"
     n_steps: int = 100
+    # noise type
+    noise_type: str = ""
     # env
     env_name: str = "unitree_h1_walk"
     # diffusion

@@ -3,6 +3,8 @@ seed: 0
 output_dir: unitree_go2_trot
 n_steps: 400
 
+noise_type: ""
+
 env_name: unitree_go2_walk
 Nsample: 2048
 Hsample: 16

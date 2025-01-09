@@ -85,6 +85,30 @@ class MBDPI:
         )  # process (batch, horizon, node)
         self.u2node_vvmap = jax.jit(jax.vmap(self.u2node_vmap, in_axes=(0)))
 
+        self.noise_type = args.noise_type
+        # random perturbation trajectories
+        import numpy as np
+        N = 100
+        normal_noise = np.random.normal(size=(N * args.Nsample, args.Hnode + 1, self.nu))
+        self.normal_noise = jnp.array(normal_noise)
+        self.noise = self.normal_noise
+
+        if self.noise_type == "lp":
+            from scipy.signal import butter, filtfilt
+            order = 1
+            cutoff_freq = 2.0
+            sampling_freq = 1.0 / self.node_dt
+            lp_filter_b, lp_filter_a = butter(order, cutoff_freq, fs=sampling_freq,
+                                            btype='low', analog=False)
+            lp_noise = filtfilt(lp_filter_b, lp_filter_a, normal_noise, axis=-2)
+            scale = lp_noise.std(0)[None]
+            lp_noise_normalized = lp_noise / scale
+            self.lp_noise = jnp.array(lp_noise_normalized)
+            self.noise = self.lp_noise
+        ##for i in range(5):
+        ##    plt.plot(lp_noise_normalized[0, i, :, 0])
+        ##plt.show()
+
     @functools.partial(jax.jit, static_argnums=(0,))
     def node2u(self, nodes):
         spline = InterpolatedUnivariateSpline(self.step_nodes, nodes, k=2)
@@ -101,9 +125,10 @@ class MBDPI:
     def reverse_once(self, state, rng, Ybar_i, noise_scale):
         # sample from q_i
         rng, Y0s_rng = jax.random.split(rng)
-        eps_Y = jax.random.normal(
-            Y0s_rng, (self.args.Nsample, self.args.Hnode + 1, self.nu)
-        )
+        #eps_Y = jax.random.normal(
+        #    Y0s_rng, (self.args.Nsample, self.args.Hnode + 1, self.nu)
+        #)
+        eps_Y = jax.random.choice(Y0s_rng, self.noise, shape=(self.args.Nsample,), axis=0)
         Y0s = eps_Y * noise_scale[None, :, None] + Ybar_i
         # we can't change the first control
         Y0s = Y0s.at[:, 0].set(Ybar_i[0, :])
@@ -187,6 +212,9 @@ def main():
         type=str,
         default=None,
         help="Custom environment to import dynamically",
+    )
+    parser.add_argument(
+        "--port", type=int, default=5000, help="Port number for visualization"
     )
     args = parser.parse_args()
 
@@ -323,7 +351,7 @@ def main():
     def index():
         return webpage
 
-    app.run(port=5000)
+    app.run(port=args.port)
 
 
 if __name__ == "__main__":
