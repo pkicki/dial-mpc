@@ -256,7 +256,7 @@ def main():
     rng, rng_reset = jax.random.split(rng)
     state_init = reset_env(rng_reset)
 
-    YN = jnp.zeros([dial_config.Hnode + 1, mbdpi.nu])
+    YN = jnp.ones([dial_config.Hnode + 1, mbdpi.nu]) * env.default_action
 
     rng_exp, rng = jax.random.split(rng)
     # Y0 = mbdpi.reverse(state_init, YN, rng_exp)
@@ -303,7 +303,7 @@ def main():
     print(f"mean reward = {rew:.4e}")
     freqs = jnp.array(freqs)
     print(f"mean freq = {freqs.mean():.2f}")
-    print(f"median freq = {freqs.median():.2f}")
+    print(f"median freq = {jnp.median(freqs):.2f}")
 
     # save us
     # us = jnp.array(us)

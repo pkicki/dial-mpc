@@ -28,6 +28,8 @@ class BaseEnv(PipelineEnv):
         self._nv = self.sys.nv
         self._nq = self.sys.nq
 
+        self.default_action = jnp.zeros_like(self.sys.actuator_ctrlrange[:, 0])
+
     def make_system(self, config: BaseEnvConfig) -> System:
         """
         Make the system for the environment. Called in BaseEnv.__init__.
