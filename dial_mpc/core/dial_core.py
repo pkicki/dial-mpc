@@ -49,7 +49,8 @@ def softmax_update(weights, Y0s, sigma, mu_0t):
 
 
 class MBDPI:
-    def __init__(self, args: DialConfig, env):
+    def __init__(self, cli_args, args: DialConfig, env):
+        self.cli_args = cli_args
         self.args = args
         self.env = env
         self.nu = env.action_size
@@ -95,8 +96,8 @@ class MBDPI:
 
         if self.noise_type == "lp":
             from scipy.signal import butter, filtfilt
-            order = 1
-            cutoff_freq = 2.0
+            order = self.cli_args.lporder
+            cutoff_freq = self.cli_args.lpfreq
             sampling_freq = 1.0 / self.node_dt
             lp_filter_b, lp_filter_a = butter(order, cutoff_freq, fs=sampling_freq,
                                             btype='low', analog=False)
@@ -107,7 +108,7 @@ class MBDPI:
             self.noise = self.lp_noise
         elif self.noise_type == "colored":
             import colorednoise
-            noise_beta = 1.0
+            noise_beta = self.cli_args.beta
             self.noise = colorednoise.powerlaw_psd_gaussian(noise_beta,
                                                             size=normal_noise.shape) 
         ##for i in range(5):
@@ -221,6 +222,21 @@ def main():
     parser.add_argument(
         "--port", type=int, default=5000, help="Port number for visualization"
     )
+    parser.add_argument(
+        "--seed", type=int, default=0, help="Seed"
+    )
+    parser.add_argument(
+        "--lporder", type=int, default=None, help="Low pass filter order"
+    )
+    parser.add_argument(
+        "--lpfreq", type=float, default=None, help="Low pass frequency"
+    )
+    parser.add_argument(
+        "--beta", type=float, default=None, help="Colored noise parameter"
+    )
+    parser.add_argument(
+        "--hnode", type=int, default=None, help="Number of nodes"
+    )
     args = parser.parse_args()
 
     if args.list_examples:
@@ -239,7 +255,10 @@ def main():
         config_dict = yaml.safe_load(open(args.config))
 
     dial_config = load_dataclass_from_dict(DialConfig, config_dict)
-    rng = jax.random.PRNGKey(seed=dial_config.seed)
+    if args.hnode is not None:
+        dial_config.Hnode = args.hnode
+    rng = jax.random.PRNGKey(seed=args.seed)
+
 
     # find env config
     env_config_type = dial_envs.get_config(dial_config.env_name)
@@ -251,7 +270,7 @@ def main():
     env = brax_envs.get_environment(dial_config.env_name, config=env_config)
     reset_env = jax.jit(env.reset)
     step_env = jax.jit(env.step)
-    mbdpi = MBDPI(dial_config, env)
+    mbdpi = MBDPI(args, dial_config, env)
 
     rng, rng_reset = jax.random.split(rng)
     state_init = reset_env(rng_reset)
